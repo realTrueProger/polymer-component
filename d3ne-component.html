@@ -1,0 +1,525 @@
+<!-- В библиотеке node editor контекстное меню рендерится в главный документ, а не в компонент!
+Там нужно заменить строку создания div с этим меню с
+this.dom = d3.select('body').append('div');
+на
+this.dom = d3.select(document.querySelector('d3ne-component').shadowRoot.getElementById('testid')).append('div'); -->
+
+
+
+<link rel="import" href="bower_components/polymer/polymer-element.html">
+
+<dom-module id="d3ne-component">
+
+    <template>
+        <style>
+            #nodeEditor {
+                height: 100%;
+            }
+
+            .node-editor {
+                background-size: 20px 20px;
+                background-image: linear-gradient(to right, #363636 1px, transparent 1px), linear-gradient(to bottom, #363636 1px, transparent 1px);
+                background-color: #272727;
+                overflow: hidden;
+            }
+
+            .node-editor * {
+                box-sizing: border-box;
+            }
+
+            .node-editor .node {
+                background: rgba(35, 35, 35, 0.7);
+                box-shadow: 1px solid black;
+                border: 1px solid black;
+                border-radius: 10px;
+                cursor: pointer;
+                display: inline-block;
+                height: auto;
+                padding-bottom: 6px;
+                box-sizing: content-box;
+                position: absolute;
+                box-shadow: 4px 5px 9px rgba(0, 0, 0, 0.5);
+            }
+
+            .node-editor .node.active {
+                background: rgba(22, 22, 22, 0.7);
+                border: 1px solid #ffd252;
+            }
+
+            .node-editor .node .title {
+                border-top: 1px solid #ccc;
+                color: white;
+                text-align: center;
+                font-weight: bold;
+                font-family: sans-serif;
+                font-size: 18px;
+                border-radius: 10px 10px 0 0;
+                padding: 8px;
+                overflow: hidden;
+                background: linear-gradient(to top, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.05) 40%, rgba(255, 255, 255, 0.19) 100%), radial-gradient(70% 40px at center, rgba(0, 255, 0, 0.5) 0%, rgba(0, 255, 0, 0) 60%);
+            }
+
+            .node-editor .node content {
+                display: table;
+                width: 100%;
+            }
+
+            .node-editor .node content column {
+                display: table-cell;
+                white-space: nowrap;
+            }
+
+            .node-editor .node content column:not(:last-child) {
+                padding-right: 20px;
+            }
+
+            .node-editor .node .socket {
+                display: inline-block;
+                cursor: pointer;
+                border: 2px solid white;
+                border-radius: 8px;
+                width: 16px;
+                height: 16px;
+                margin: 10px;
+                vertical-align: middle;
+                background: transparent;
+                position: relative;
+                z-index: 2;
+            }
+
+            .node-editor .node .socket.used {
+                background: white;
+            }
+
+            .node-editor .node .socket:after {
+                content: "";
+                position: absolute;
+                width: 0;
+                height: 0;
+                top: 3px;
+                left: 16px;
+                display: inline-block;
+                border-style: solid;
+                border-width: 4px 0 4px 2.6666666667px;
+                border-color: transparent transparent transparent white;
+            }
+
+            .node-editor .node .socket:hover {
+                border-color: #777;
+            }
+
+            .node-editor .node .socket.multiple {
+                border-color: yellow;
+            }
+
+            .node-editor .node .input-title,
+            .node-editor .node .output-title {
+                vertical-align: middle;
+                color: white;
+                display: inline-block;
+                font-family: sans-serif;
+                font-size: 14px;
+                margin: 10px 0;
+                line-height: 16px;
+            }
+
+            .node-editor .node .input-control {
+                z-index: 1;
+                vertical-align: middle;
+                display: inline-block;
+            }
+
+            .node-editor .node .control {
+                width: 100%;
+                padding: 10px 18px;
+                color: #ffffff;
+            }
+
+            .node-editor .group {
+                border-radius: 16px;
+                background: rgba(15, 80, 255, 0.2);
+                cursor: pointer;
+                width: inherit;
+                height: inherit;
+                border: 6px solid transparent;
+                position: absolute;
+            }
+
+            .node-editor .group.active {
+                border-color: #ffd92c;
+            }
+
+            .node-editor .group .group-title {
+                color: white;
+                font-family: sans-serif;
+                font-size: 18px;
+                padding: 12px;
+            }
+
+            .node-editor .group .group-handler {
+                background: transparent;
+                width: 40px;
+                height: 40px;
+                position: absolute;
+            }
+
+            .node-editor .group .group-handler.right.bottom {
+                cursor: se-resize;
+                right: -10px;
+                bottom: -10px;
+            }
+
+            .node-editor .group .group-handler.left.top {
+                cursor: nw-resize;
+                left: -10px;
+                top: -10px;
+            }
+
+            .node-editor .group .group-handler.right.top {
+                cursor: ne-resize;
+                right: -10px;
+                top: -10px;
+            }
+
+            .node-editor .group .group-handler.left.bottom {
+                cursor: sw-resize;
+                left: -10px;
+                bottom: -10px;
+            }
+
+            .node-editor .connections {
+                position: absolute;
+                overflow: visible;
+                pointer-events: none;
+            }
+
+            .node-editor .connections .connection {
+                fill: none;
+                stroke: #eee;
+                stroke-width: 2px;
+                pointer-events: none;
+            }
+
+            .node-editor .connections .connection.active {
+                stroke: #aaa;
+            }
+
+            .node-editor select,
+            .node-editor input {
+                width: 60px;
+                background-color: transparent;
+                padding: 2px 6px;
+                border: 1px solid white;
+                font-size: 14px;
+                color: white;
+            }
+
+            .context-menu {
+                left: 0;
+                top: 0;
+                position: absolute;
+                padding: 10px;
+                margin-top: -20px;
+            }
+
+            .context-menu>.item {
+                margin-left: -80%;
+            }
+
+            .context-menu>.item .subitems {
+                position: absolute;
+                display: none;
+                left: 100%;
+                top: 0;
+                border-radius: 7px;
+                overflow: overlay;
+            }
+
+            .context-menu>.item:hover .subitems {
+                display: block;
+            }
+
+            .context-menu>.item.have-subitems {
+                padding-right: 16px;
+            }
+
+            .context-menu>.item.have-subitems:after {
+                content: "►";
+                position: absolute;
+                opacity: 0.6;
+                right: 5px;
+                top: 5px;
+            }
+
+            .context-menu .item {
+                padding: 4px;
+                border-bottom: 1px solid rgba(15, 15, 15, 0.7);
+                color: #fff;
+                background-color: rgba(35, 35, 35, 0.7);
+                cursor: pointer;
+                width: 100px;
+                position: relative;
+            }
+
+            .context-menu .item:first-child {
+                border-radius: 7px 7px 0 0;
+            }
+
+            .context-menu .item:last-child {
+                border-radius: 0 0 7px 7px;
+            }
+
+            .context-menu .item:hover {
+                background-color: rgba(45, 45, 45, 0.7);
+            }
+
+            .node-editor .node .socket.act {
+                border-radius: 0;
+            }
+
+            div.node.move-up {
+                width: 200px;
+            }
+
+            div.node.move-down {
+                width: 200px;
+            }
+
+            div.node.move-left {
+                width: 200px;
+            }
+
+            div.node.move-right {
+                width: 200px;
+            }
+
+            .container {
+                width: 100%;
+                height: 100%;
+            }
+
+            h1 {
+                text-align: center;
+            }
+        </style>
+
+        <h1>Polymer Node Editor component</h1>
+        <div class="container" id="testid">
+            <div id="d3ne" class="node-editor"></div>
+        </div>
+    </template>
+
+    <script src="https://cdn.jsdelivr.net/npm/alight@0.14.0/alight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@4.10.2/build/d3.min.js"></script>
+
+    <!-- ссылка на изменённую версию node editor(см комментарий в начале файла) -->
+    <script src="node_modules/d3-node-editor/build/d3-node-editor.1.js"></script>
+    <script>
+        class D3neComponent extends Polymer.Element {
+            static get is() {
+                return "d3ne-component";
+            }
+            ready() {
+                super.ready();
+                //rgb to hex function
+
+                const rgb2hex = (rgb) => {
+                    if (/^#[0-9A-F]{6}$/i.test(rgb)) return rgb;
+                    rgb = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+
+                    function hex(x) {
+                        return ("0" + parseInt(x).toString(16)).slice(-2);
+                    }
+
+                    return "#" + hex(rgb[1]) + hex(rgb[2]) + hex(rgb[3]);
+                };
+
+
+                // sockets
+
+                const actionSocket = new D3NE.Socket('act', 'Action', 'hint');
+                const dataSocket = new D3NE.Socket('data', 'Data', 'hint');
+
+                // eventsHandler
+
+                const eventHandlers = {
+                    list: [],
+                    remove() {
+                        this
+                            .list
+                            .forEach(h => {
+                                document.removeEventListener('keydown', h);
+                            });
+                        this.list = [];
+                    },
+                    add(name, h) {
+                        document.addEventListener(name, h, false);
+                        this
+                            .list
+                            .push(h);
+                    }
+                };
+
+                // components
+
+                const keydownComp = new D3NE.Component('Keydown event', {
+                    builder(node) {
+
+                        return node
+                            .addOutput(new D3NE.Output('Action', actionSocket))
+                            .addOutput(new D3NE.Output('Key code', dataSocket));
+                    },
+                    worker(node, inputs, outputs) {
+
+                        const task = new D3NE.Task(inputs, function (inps, data) {
+                            console.log('Keydown event', node.id, data);
+                            return [data]
+                        });
+
+                        eventHandlers.remove();
+                        eventHandlers.add('keydown', function (e) {
+                            task.run(e.keyCode);
+                            task.reset();
+                        });
+
+                        outputs[0] = task.option(0);
+                        outputs[1] = task.output(0);
+                    }
+                });
+
+                const moveControllerComp = new D3NE.Component('Move control', {
+                    builder(node) {
+
+                        return node
+                            .addInput(new D3NE.Input('Action', actionSocket))
+                            .addInput(new D3NE.Input('Key code', dataSocket))
+                            .addOutput(new D3NE.Output('Up', actionSocket))
+                            .addOutput(new D3NE.Output('Down', actionSocket))
+                            .addOutput(new D3NE.Output('Left', actionSocket))
+                            .addOutput(new D3NE.Output('Right', actionSocket));
+                    },
+                    worker(node, inputs, outputs) {
+
+                        const task = new D3NE.Task(inputs, function (inps) {
+                            if (inps[0][0] == 38)
+                                this.closed = [1, 2, 3];
+                            else if (inps[0][0] == 40)
+                                this.closed = [0, 2, 3];
+                            else if (inps[0][0] == 37)
+                                this.closed = [0, 1, 3];
+                            else if (inps[0][0] == 39)
+                                this.closed = [0, 1, 2];
+                            console.log('Print', node.id, inps);
+                        });
+
+                        outputs[0] = task.option(0);
+                        outputs[1] = task.option(1);
+                        outputs[2] = task.option(2);
+                        outputs[3] = task.option(3);
+                    }
+                });
+
+                const moveUpComp = new D3NE.Component('Move Up', {
+                    builder(node) {
+                        return node
+                            .addInput(new D3NE.Input('Action', actionSocket));
+                    },
+                    worker(node, inputs, outputs) {
+
+                        const task = new D3NE.Task(inputs, function () {
+                            const button = document.getElementById('button');
+                            const styles = getComputedStyle(button);
+                            button.style.top = parseInt(styles.top) - 1 + 'px';
+                        });
+                    }
+                });
+
+                const moveDownComp = new D3NE.Component('Move Down', {
+                    builder(node) {
+                        return node
+                            .addInput(new D3NE.Input('Action', actionSocket));
+                    },
+                    worker(node, inputs, outputs) {
+
+                        const task = new D3NE.Task(inputs, function () {
+                            const button = document.getElementById('button');
+                            const styles = getComputedStyle(button);
+                            button.style.top = parseInt(styles.top) + 1 + 'px';
+                        });
+                    }
+                });
+
+                const moveLeftComp = new D3NE.Component('Move left', {
+                    builder(node) {
+                        return node
+                            .addInput(new D3NE.Input('Action', actionSocket));
+                    },
+                    worker(node, inputs, outputs) {
+
+                        const task = new D3NE.Task(inputs, function () {
+                            const button = document.getElementById('button');
+                            const styles = getComputedStyle(button);
+                            button.style.left = parseInt(styles.left) - 1 + 'px';
+                        });
+                    }
+                });
+
+                const moveRightComp = new D3NE.Component('Move Right', {
+                    builder(node) {
+                        return node
+                            .addInput(new D3NE.Input('Action', actionSocket));
+                    },
+                    worker(node, inputs, outputs) {
+
+                        const task = new D3NE.Task(inputs, function () {
+                            const button = document.getElementById('button');
+                            const styles = getComputedStyle(button);
+                            button.style.left = parseInt(styles.left) + 1 + 'px';
+                        });
+                    }
+                });
+
+
+
+                const components = [keydownComp, moveControllerComp, moveUpComp, moveDownComp, moveLeftComp, moveRightComp];
+
+
+                // menu, engine and editor
+
+                const container = this.shadowRoot.querySelector('#d3ne');
+
+                const menu = new D3NE.ContextMenu({
+
+                    //
+                    'Keydown': keydownComp,
+                    //
+                    'Move Controller': moveControllerComp,
+                    //
+                    'Moving controllers': {
+                        'MoveUp': moveUpComp,
+                        'MoveDown': moveDownComp,
+                        'MoveLeft': moveLeftComp,
+                        'MoveRight': moveRightComp,
+                    },
+                }, false);
+
+                const editor = new D3NE.NodeEditor('glslsample@0.1.0', container, components, menu);
+
+                editor.eventListener.on('connectioncreate connectionremove nodecreate noderemove', (_, p) => {
+                    if (p)
+                        compile();
+                });
+
+                const engine = new D3NE.Engine('glslsample@0.1.0', components);
+
+                async function compile() {
+                    await engine.abort();
+                    const status = await engine.process(editor.toJSON());
+                }
+
+            }
+        }
+        customElements.define(D3neComponent.is, D3neComponent);
+    </script>
+
+</dom-module>
